@@ -4,7 +4,10 @@ Combined Data Fetch Runner (Manus Scheduled Task)
 
 Runs every hour. On each run:
   1. Always: fetch_news.py (RSS news aggregation)
-  2. Daily (first run of the day): fetch_sensortower.py + fetch_producthunt_top.py
+  2. Daily (first run of the day):
+     - fetch_sensortower.py (app rankings)
+     - fetch_producthunt_top.py (top products)
+     - fetch_github_trending.py (trending repos)
 
 The "daily" tasks are gated by checking whether the current UTC date
 has already been processed (tracked via a local marker file).
@@ -109,6 +112,23 @@ def run_producthunt():
         traceback.print_exc()
 
 
+def run_github_trending():
+    """Run the GitHub trending repos fetcher."""
+    log.info("=" * 60)
+    log.info("TASK 4: GitHub Trending Fetcher")
+    log.info("=" * 60)
+    try:
+        os.chdir(str(MARKER_DIR))
+        sys.path.insert(0, str(MARKER_DIR))
+
+        import fetch_github_trending
+        fetch_github_trending.main()
+        log.info("GitHub trending fetcher completed successfully.")
+    except Exception as e:
+        log.error(f"GitHub trending fetcher failed: {e}")
+        traceback.print_exc()
+
+
 def main():
     log.info("=" * 60)
     log.info(f"Combined Data Fetch Runner — {datetime.now(timezone.utc).isoformat()}")
@@ -117,13 +137,14 @@ def main():
     # Task 1: Always run news fetcher
     run_news()
 
-    # Tasks 2 & 3: Run daily tasks only once per UTC day
+    # Tasks 2, 3, 4: Run daily tasks only once per UTC day
     if _daily_already_ran():
-        log.info("\nDaily tasks (Sensor Tower + Product Hunt) already ran today. Skipping.")
+        log.info("\nDaily tasks (Sensor Tower + Product Hunt + GitHub Trending) already ran today. Skipping.")
     else:
         log.info("\nRunning daily tasks (first run of the day)...")
         run_sensortower()
         run_producthunt()
+        run_github_trending()
         _mark_daily_done()
         log.info("Daily tasks completed and marked as done.")
 
