@@ -1,0 +1,4 @@
+openai
+feedparser
+requests
+openpyxl
