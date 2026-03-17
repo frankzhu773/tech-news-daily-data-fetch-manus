@@ -80,8 +80,8 @@ REQUEST_HEADERS = {
 
 # Google Sheet headers for podcast data
 HEADERS = [
-    "fetch_date", "podcast_name", "episode_title", "summary",
-    "link", "audio_url", "pub_date", "podcast_image_url",
+    "fetch_date", "podcast_name", "episode_title", "episode_title_original",
+    "summary", "link", "audio_url", "pub_date", "podcast_image_url",
     "episode_image_url", "is_tech_related",
 ]
 
@@ -356,6 +356,72 @@ def enrich_with_scraped_text(episodes: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Step 1.5 – Translate Non-English Episode Titles
+# ---------------------------------------------------------------------------
+
+def _is_non_english(text: str) -> bool:
+    """Heuristic check: if >30% of characters are non-ASCII, treat as non-English."""
+    if not text:
+        return False
+    non_ascii = sum(1 for c in text if ord(c) > 127)
+    return non_ascii / len(text) > 0.3
+
+
+def translate_titles(episodes: list[dict]) -> None:
+    """Translate non-English episode titles to English using the LLM.
+
+    Stores the original title in 'episode_title_original' and overwrites
+    'episode_title' with the English translation.
+    """
+    to_translate = [ep for ep in episodes if _is_non_english(ep["episode_title"])]
+    if not to_translate:
+        print("  No non-English titles to translate.")
+        return
+
+    print(f"  Translating {len(to_translate)} non-English title(s)...")
+
+    # Batch translate for efficiency
+    titles_text = "\n".join(
+        f"[{i}] {ep['episode_title']}" for i, ep in enumerate(to_translate)
+    )
+
+    prompt = f"""Translate each of the following podcast episode titles to English.
+Keep the translation concise and faithful to the original meaning.
+Respond with one translation per line in the format: [index] translated title
+
+Titles:
+{titles_text}
+
+Translations:"""
+
+    result = call_llm(prompt, system="You are a professional translator. Translate to English.",
+                      max_tokens=1000, use_search=False)
+
+    if not result:
+        print("  Translation failed, keeping original titles.")
+        return
+
+    # Parse translations
+    translations = {}
+    for line in result.strip().splitlines():
+        line = line.strip()
+        match = re.match(r"\[?(\d+)\]?\s*(.+)", line)
+        if match:
+            idx = int(match.group(1))
+            translated = match.group(2).strip()
+            translations[idx] = translated
+
+    for i, ep in enumerate(to_translate):
+        if i in translations:
+            ep["episode_title_original"] = ep["episode_title"]
+            ep["episode_title"] = translations[i]
+            print(f"    Translated: {ep['episode_title_original'][:40]}... -> {ep['episode_title'][:60]}")
+        else:
+            ep["episode_title_original"] = ep["episode_title"]
+            print(f"    No translation for: {ep['episode_title'][:50]}")
+
+
+# ---------------------------------------------------------------------------
 # Step 2 – LLM Summarisation
 # ---------------------------------------------------------------------------
 
@@ -535,6 +601,12 @@ def main():
     enrich_with_scraped_text(all_episodes)
 
     # ------------------------------------------------------------------
+    # Phase 2.5: Translate non-English episode titles
+    # ------------------------------------------------------------------
+    print(f"\n[Phase 2.5] Translating non-English episode titles...")
+    translate_titles(all_episodes)
+
+    # ------------------------------------------------------------------
     # Phase 3: Summarise each episode using LLM
     # ------------------------------------------------------------------
     print(f"\n[Phase 3] Generating summaries...\n")
@@ -561,6 +633,7 @@ def main():
             "fetch_date": now_str,
             "podcast_name": ep["podcast_name"],
             "episode_title": ep["episode_title"],
+            "episode_title_original": ep.get("episode_title_original", ep["episode_title"]),
             "summary": ep.get("summary", ""),
             "link": ep.get("link", ""),
             "audio_url": ep.get("audio_url", ""),
