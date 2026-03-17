@@ -4,7 +4,8 @@ Combined Data Fetch Runner (Manus Scheduled Task)
 
 Runs every hour. On each run:
   1. Always: fetch_news.py (RSS news aggregation)
-  2. Daily (first run of the day):
+  2. Always: fetch_x_posts.py (X.com AI/tech posts)
+  3. Daily (first run of the day):
      - fetch_sensortower.py (app rankings)
      - fetch_producthunt_top.py (top products)
      - fetch_github_trending.py (trending repos)
@@ -131,6 +132,23 @@ def run_github_trending():
         traceback.print_exc()
 
 
+def run_x_posts():
+    """Run the X.com posts fetcher."""
+    log.info("=" * 60)
+    log.info("TASK 6: X.com Posts Fetcher")
+    log.info("=" * 60)
+    try:
+        os.chdir(str(SCRIPT_DIR))
+        sys.path.insert(0, str(SCRIPT_DIR))
+
+        import fetch_x_posts
+        fetch_x_posts.main()
+        log.info("X.com posts fetcher completed successfully.")
+    except Exception as e:
+        log.error(f"X.com posts fetcher failed: {e}")
+        traceback.print_exc()
+
+
 def run_podcasts():
     """Run the podcast monitor."""
     log.info("=" * 60)
@@ -155,6 +173,9 @@ def main():
 
     # Task 1: Always run news fetcher
     run_news()
+
+    # Task 6: Always run X.com posts fetcher
+    run_x_posts()
 
     # Tasks 2, 3, 4, 5: Run daily tasks only once per UTC day
     if _daily_already_ran():
