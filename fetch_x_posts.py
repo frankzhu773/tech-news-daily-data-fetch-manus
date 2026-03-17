@@ -19,6 +19,7 @@ Output files:
 import sys
 import os
 import json
+import re
 import logging
 import time as _time
 from datetime import datetime, timezone, timedelta
@@ -59,12 +60,15 @@ HEADERS = [
     "author_role",
     "tweet_type",
     "full_text",
+    "full_text_original",
     "quoted_text",
+    "quoted_text_original",
     "summary",
     "link",
     "images",
     "created_at",
     "is_tech_related",
+    "profile_photo_url",
 ]
 
 DEDUP_KEYS = ["link"]  # Primary key: tweet URL
@@ -77,17 +81,30 @@ LOOKBACK_HOURS = float(os.environ.get("X_LOOKBACK_HOURS", "2"))
 api_client = ApiClient()
 
 
-def get_user_id(username: str) -> str:
-    """Resolve a username to its rest_id via the Twitter profile API."""
+# Cache for profile photo URLs (username -> url)
+_profile_photo_cache = {}
+
+
+def get_user_id_and_photo(username: str) -> tuple[str, str]:
+    """Resolve a username to its rest_id and profile photo URL via the Twitter profile API."""
     resp = api_client.call_api(
         'Twitter/get_user_profile_by_username',
         query={'username': username}
     )
-    return (resp.get('result', {})
-                .get('data', {})
-                .get('user', {})
-                .get('result', {})
-                .get('rest_id', ''))
+    user_result = (resp.get('result', {})
+                      .get('data', {})
+                      .get('user', {})
+                      .get('result', {}))
+    rest_id = user_result.get('rest_id', '')
+
+    # Extract profile photo from avatar.image_url
+    # Replace '_normal' with '_400x400' for higher resolution
+    photo_url = user_result.get('avatar', {}).get('image_url', '')
+    if photo_url:
+        photo_url = photo_url.replace('_normal.', '_400x400.')
+    _profile_photo_cache[username] = photo_url
+
+    return rest_id, photo_url
 
 
 def fetch_user_tweets(user_id: str, count: int = 20):
@@ -236,6 +253,76 @@ def summarize_tweet(text: str, author: str) -> str:
     return clean[:120] + ('...' if len(clean) > 120 else '')
 
 
+# ── Translation ────────────────────────────────────────────────────────────
+
+def _is_non_english(text: str) -> bool:
+    """Heuristic check: if >30% of characters are non-ASCII, treat as non-English."""
+    if not text:
+        return False
+    non_ascii = sum(1 for c in text if ord(c) > 127)
+    return non_ascii / len(text) > 0.3
+
+
+def translate_text(text: str) -> str:
+    """Translate non-English text to English using the LLM."""
+    if not text or not _is_non_english(text):
+        return text
+
+    prompt = f"""Translate the following text to English. Keep the translation faithful
+to the original meaning. Only output the translation, nothing else.
+
+Text:
+{text}
+
+Translation:"""
+
+    result = call_llm(
+        prompt,
+        system="You are a professional translator. Translate to English faithfully and concisely.",
+        max_tokens=500,
+        use_search=False,
+    )
+    return result.strip() if result else text
+
+
+def translate_tweets(results: list) -> list:
+    """Translate non-English full_text and quoted_text in tweet results.
+
+    Stores originals in separate fields and overwrites with English translations.
+    Each result is a tuple of (acct, tweet, summary).
+    """
+    to_translate = []
+    for i, (acct, tweet, summary) in enumerate(results):
+        needs = _is_non_english(tweet['full_text']) or _is_non_english(tweet.get('quoted_text', ''))
+        if needs:
+            to_translate.append(i)
+
+    if not to_translate:
+        print("  No non-English tweets to translate.")
+        return results
+
+    print(f"  Translating {len(to_translate)} non-English tweet(s)...")
+
+    for idx in to_translate:
+        acct, tweet, summary = results[idx]
+
+        # Translate full_text
+        if _is_non_english(tweet['full_text']):
+            tweet['full_text_original'] = tweet['full_text']
+            translated = translate_text(tweet['full_text'])
+            tweet['full_text'] = translated
+            print(f"    [@{acct['username']}] Translated full_text: {tweet['full_text_original'][:40]}... -> {translated[:50]}")
+
+        # Translate quoted_text
+        if tweet.get('quoted_text') and _is_non_english(tweet['quoted_text']):
+            tweet['quoted_text_original'] = tweet['quoted_text']
+            translated = translate_text(tweet['quoted_text'])
+            tweet['quoted_text'] = translated
+            print(f"    [@{acct['username']}] Translated quoted_text")
+
+    return results
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 def main():
@@ -261,7 +348,7 @@ def main():
         print(f"  Fetching @{username} ({display})...", end=" ", flush=True)
 
         try:
-            user_id = get_user_id(username)
+            user_id, profile_photo = get_user_id_and_photo(username)
             if not user_id:
                 print("Could not resolve user ID")
                 continue
@@ -314,6 +401,10 @@ def main():
         print("\n  No tech-related tweets found. Nothing to save.")
         return
 
+    # Translate non-English tweets
+    print(f"\n  Translating non-English tweets...")
+    all_results = translate_tweets(all_results)
+
     # Build rows for Google Sheet
     rows = []
     for acct, tweet, summary in all_results:
@@ -329,12 +420,15 @@ def main():
             "author_role": acct['role'],
             "tweet_type": tweet['type'],
             "full_text": tweet['full_text'],
+            "full_text_original": tweet.get('full_text_original', tweet['full_text']),
             "quoted_text": tweet.get('quoted_text', ''),
+            "quoted_text_original": tweet.get('quoted_text_original', tweet.get('quoted_text', '')),
             "summary": summary,
             "link": tweet_url,
             "images": images_str,
             "created_at": created_str,
             "is_tech_related": "TRUE",
+            "profile_photo_url": _profile_photo_cache.get(acct['username'], ''),
         })
 
     # Save to Google Drive
