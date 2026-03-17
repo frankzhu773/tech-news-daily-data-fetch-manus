@@ -347,6 +347,21 @@ def save_latest_and_cumulative(base_filename, rows, headers, dedup_keys):
     else:
         all_rows = rows
 
+    # Final dedup safety check: remove any remaining duplicates by dedup_keys
+    def _make_key(row):
+        return tuple(str(row.get(k, "")) for k in dedup_keys)
+
+    seen_keys = set()
+    deduped_rows = []
+    for row in all_rows:
+        key = _make_key(row)
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped_rows.append(row)
+    if len(deduped_rows) < len(all_rows):
+        log.warning(f"  [Cumulative] Removed {len(all_rows) - len(deduped_rows)} duplicate rows in safety check")
+    all_rows = deduped_rows
+
     _write_to_folder(cumulative_name, all_rows, headers, cumulative_folder)
     log.info(f"  [Cumulative] Saved {len(rows)} new rows to {cumulative_name} (total: {len(all_rows)})")
     return len(rows)

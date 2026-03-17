@@ -1,0 +1,15 @@
+GitHub Trending Page Structure (12 repos today):
+1. 666ghj/MiroFish - Python - 29,037 stars - 3,542 forks - 3,257 stars today - "A Simple and Universal Swarm Intelligence Engine, Predicting Anything."
+2. thedotmack/claude-mem - TypeScript - 36,228 stars - 2,607 forks - 1,017 stars today - "A Claude Code plugin..."
+3. Crosstalk-Solutions/project-nomad - TypeScript - 1,519 stars - 145 forks - 773 stars today
+4. obra/superpowers - Shell - 87,708 stars - 6,923 forks - 3,142 stars today
+5. abhigyanpatwari/GitNexus - TypeScript - 15,201 stars - 1,755 forks - 1,867 stars today
+6. lightpanda-io/browser - Zig - 19,849 stars - 751 forks - 2,089 stars today
+7. volcengine/OpenViking - Python - 13,599 stars - 936 forks - 2,014 stars today
+8. shareAI-lab/learn-claude-code - TypeScript - 29,049 stars - 4,987 forks - 1,542 stars today
+9. p-e-w/heretic - Python - 15,072 stars - 1,524 forks - 787 stars today
+10. langchain-ai/deepagents - Python - 12,286 stars - 1,949 forks - 444 stars today
+11. YishenTu/claudian - TypeScript - 3,983 stars - 233 forks - 109 stars today
+12. voidzero-dev/vite-plus - Rust - 2,071 stars - 73 forks - 622 stars today
+
+Data fields: rank, repo_name, description, language, total_stars, forks, stars_today, url

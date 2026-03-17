@@ -28,8 +28,9 @@ logging.basicConfig(
 log = logging.getLogger("run_all")
 
 # Marker file to track which UTC date has already run daily tasks
-MARKER_DIR = Path("/home/ubuntu/manus-data-fetch")
-DAILY_MARKER = MARKER_DIR / ".daily_marker"
+# Stored OUTSIDE the repo directory so git pull / clone won't erase it
+SCRIPT_DIR = Path("/home/ubuntu/manus-data-fetch")
+DAILY_MARKER = Path("/home/ubuntu/.daily_marker")
 
 # Environment variables for API keys
 SENSORTOWER_API_KEY = os.environ.get("SENSORTOWER_API_KEY", "")
@@ -61,8 +62,8 @@ def run_news():
     log.info("=" * 60)
     try:
         # Change to script directory so imports work
-        os.chdir(str(MARKER_DIR))
-        sys.path.insert(0, str(MARKER_DIR))
+        os.chdir(str(SCRIPT_DIR))
+        sys.path.insert(0, str(SCRIPT_DIR))
 
         import fetch_news
         fetch_news.main()
@@ -81,8 +82,8 @@ def run_sensortower():
         log.warning("SENSORTOWER_API_KEY not set, skipping Sensor Tower fetch.")
         return
     try:
-        os.chdir(str(MARKER_DIR))
-        sys.path.insert(0, str(MARKER_DIR))
+        os.chdir(str(SCRIPT_DIR))
+        sys.path.insert(0, str(SCRIPT_DIR))
 
         import fetch_sensortower
         fetch_sensortower.main()
@@ -101,8 +102,8 @@ def run_producthunt():
         log.warning("PH_API_KEY/PH_API_SECRET not set, skipping Product Hunt fetch.")
         return
     try:
-        os.chdir(str(MARKER_DIR))
-        sys.path.insert(0, str(MARKER_DIR))
+        os.chdir(str(SCRIPT_DIR))
+        sys.path.insert(0, str(SCRIPT_DIR))
 
         import fetch_producthunt_top
         fetch_producthunt_top.main()
@@ -118,8 +119,8 @@ def run_github_trending():
     log.info("TASK 4: GitHub Trending Fetcher")
     log.info("=" * 60)
     try:
-        os.chdir(str(MARKER_DIR))
-        sys.path.insert(0, str(MARKER_DIR))
+        os.chdir(str(SCRIPT_DIR))
+        sys.path.insert(0, str(SCRIPT_DIR))
 
         import fetch_github_trending
         fetch_github_trending.main()

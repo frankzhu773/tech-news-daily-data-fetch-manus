@@ -31,7 +31,7 @@ DATA_DELAY_DAYS = 2
 # ─── Rate limiter for SensorTower API ────────────────────────────────────────
 _st_rate_lock = threading.Lock()
 _st_last_call = 0.0
-ST_MIN_INTERVAL = 0.2
+ST_MIN_INTERVAL = 0.5  # 500ms between API calls to avoid rate limiting
 
 def _rate_limited_wait():
     global _st_last_call
@@ -164,7 +164,16 @@ def lookup_app(app_id):
         if app_id_str in _app_cache:
             return _app_cache[app_id_str].copy()
 
-    data = st_get(f"/v1/unified/apps/{app_id_str}", {})
+    # Retry with exponential backoff for transient failures
+    data = None
+    for attempt in range(3):
+        data = st_get(f"/v1/unified/apps/{app_id_str}", {})
+        if data and isinstance(data, dict):
+            break
+        if attempt < 2:
+            wait = 2 * (attempt + 1)
+            time.sleep(wait)
+
     if not data or not isinstance(data, dict):
         result = {"name": "Unknown", "icon_url": "", "publisher": "Unknown", "description": "",
                   "ios_store_url": "", "android_store_url": ""}
@@ -254,7 +263,7 @@ def parallel_lookup_apps(app_ids):
         if cache_hits > 0:
             print(f"    Cache hits: {cache_hits}, uncached lookups: {len(uncached_ids)}")
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:  # Reduced from 5 to avoid rate limiting
             future_to_id = {executor.submit(lookup_app, aid): aid for aid in uncached_ids}
             for future in as_completed(future_to_id):
                 aid = future_to_id[future]
@@ -264,6 +273,21 @@ def parallel_lookup_apps(app_ids):
                     print(f"    Lookup error for {aid}: {e}")
                     results[aid] = {"name": "Unknown", "icon_url": "", "publisher": "Unknown",
                                     "description": "", "ios_store_url": "", "android_store_url": ""}
+
+    # Verification pass: retry any lookups that returned "Unknown" name
+    failed_ids = [aid for aid, info in results.items() if info.get("name") == "Unknown"]
+    if failed_ids:
+        print(f"    Retrying {len(failed_ids)} failed lookups sequentially...")
+        for aid in failed_ids:
+            # Clear cache so lookup_app tries fresh
+            with _cache_lock:
+                _app_cache.pop(aid, None)
+            time.sleep(1)  # Extra delay between retries
+            result = lookup_app(aid)
+            if result.get("name") != "Unknown":
+                results[aid] = result
+        still_failed = sum(1 for aid in failed_ids if results[aid].get("name") == "Unknown")
+        print(f"    After retry: {len(failed_ids) - still_failed} recovered, {still_failed} still failed")
 
     return results
 
