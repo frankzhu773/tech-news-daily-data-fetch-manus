@@ -254,7 +254,22 @@ def fetch_and_filter(
 
             title = entry.get("title", "No title")
             full_rss_text = get_full_rss_text(entry)
-            link = entry.get("link", "")
+            link = entry.get("link", "").strip()
+            # Fallback: if link is empty, try to construct one from the GUID/ID,
+            # or use the audio URL as the link
+            if not link:
+                entry_id = entry.get("id", "").strip()
+                if entry_id and entry_id.startswith("http"):
+                    link = entry_id
+            if not link:
+                # Use audio enclosure URL as last resort
+                for enc_link in entry.get("links", []):
+                    href = enc_link.get("href", "")
+                    if href and enc_link.get("rel") == "enclosure":
+                        link = href
+                        break
+            if not link:
+                link = get_audio_url(entry)  # final fallback
             audio_url = get_audio_url(entry)
             episode_image = get_episode_image(entry)
 
