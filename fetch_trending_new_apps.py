@@ -75,7 +75,18 @@ LLM_BATCH_SIZE = 10
 
 # Google Sheet output
 BASE_FILENAME = "trending_new_apps"
+AGGREGATED_FILENAME = "trending_new_apps_aggregated"
 DEDUP_KEYS = ["fetch_date", "unified_app_id"]
+AGGREGATED_HEADERS = [
+    "fetch_date",
+    "category",
+    "app_count",
+    "total_weekly_downloads",
+    "total_dau_30d",
+    "avg_growth_rate_pct",
+    "example_apps",
+]
+AGGREGATED_DEDUP_KEYS = ["fetch_date", "category"]
 
 HEADERS_OUT = [
     "fetch_date",
@@ -83,6 +94,7 @@ HEADERS_OUT = [
     "app_name",
     "publisher_name",
     "icon_url",
+    "app_category",
     "primary_category",
     "app_iq_category",
     "earliest_release_date",
@@ -413,9 +425,10 @@ def fetch_descriptions(enriched_apps):
 # ─── STEP 5: Classify ALL Apps via LLM ───────────────────────────────────
 
 def classify_apps_with_llm(enriched_apps):
-    """Use LLM to classify every app and determine if it should be excluded."""
+    """Use LLM to classify every app: exclude unwanted categories AND assign
+    a descriptive app_category label using Google Search grounding."""
     log.info("=" * 60)
-    log.info("STEP 5: Classifying ALL apps via LLM (name + description)")
+    log.info("STEP 5: Classifying ALL apps via LLM (exclude + categorize)")
     log.info("=" * 60)
 
     exclusions = {}
@@ -442,38 +455,39 @@ def classify_apps_with_llm(enriched_apps):
             )
 
         prompt = (
-            "You are a mobile app classifier. For each app below, determine if it belongs to "
-            "ANY of these 5 excluded categories:\n\n"
-            "1. **Games** — actual playable games (casual, arcade, puzzle, action, etc.), "
-            "game mods, game skins, game companion/guide apps\n"
-            "2. **Finance** — banking, investing, cryptocurrency, stock trading, "
-            "insurance, loans, personal finance management, money transfer apps\n"
-            "3. **Government** — government services, police, military, tax filing, DMV, "
-            "passport/visa services, civic services, municipal apps\n"
-            "4. **Utility** — pure tool/utility apps like keyboards, calculators, VPNs, caller IDs, "
-            "file managers, battery savers, flashlights, QR scanners, PDF viewers, "
-            "device cleaners, speed testers, wallpaper-only apps\n"
-            "5. **Religion** — prayer apps, scripture/holy book readers, worship aids, "
-            "religious community management, faith-based social networking, "
-            "meditation apps centered on a specific religion\n\n"
+            "You are a mobile app classifier. For each app below, do TWO things:\n\n"
+            "**Task A — Exclude check:** Determine if the app belongs to ANY of these "
+            "5 excluded categories:\n"
+            "1. **Games** — actual playable games, game mods, game skins, game companion apps\n"
+            "2. **Finance** — banking, investing, crypto, stock trading, insurance, loans, money transfer\n"
+            "3. **Government** — government services, police, military, tax filing, civic services\n"
+            "4. **Utility** — pure tools like keyboards, calculators, VPNs, caller IDs, "
+            "file managers, battery savers, flashlights, QR scanners, PDF viewers\n"
+            "5. **Religion** — prayer apps, scripture readers, worship aids, faith-based social\n\n"
+            "**Task B — Category label:** Assign a concise, descriptive app category label "
+            "that captures what the app actually does. Use specific labels like:\n"
+            "  AI Assistant, AI Image Generator, AI Video Creator, Social Networking, "
+            "  Short Video, Photo Editor, Video Editor, Dating, E-commerce, Food Delivery, "
+            "  Fitness Tracker, Mental Health, Language Learning, Music Streaming, "
+            "  Podcast Player, News Aggregator, Task Manager, Note Taking, "
+            "  Ride Hailing, Travel Booking, Real Estate, Job Search, Parenting, "
+            "  Pet Care, Fashion, Beauty, Sports, Education, Health, Meditation, etc.\n"
+            "  Use Google Search if needed to understand what the app does.\n\n"
             "For EACH app, respond with a JSON object on a single line:\n"
-            '{"app_num": <number>, "exclude": true/false, "category": "<which excluded category or none>", '
-            '"reason": "<brief explanation>"}\n\n'
+            '{"app_num": <number>, "exclude": true/false, '
+            '"exclude_reason": "<which excluded category or none>", '
+            '"app_category": "<descriptive category label>"}\n\n'
             "Rules:\n"
             "- Only exclude if the app's PRIMARY purpose clearly fits an excluded category\n"
-            "- If unsure or borderline, lean toward KEEPING the app\n\n"
-            "IMPORTANT — DO NOT exclude these types:\n"
-            "- Sports streaming/scores/fan apps are NOT Games — they are Sports/Entertainment\n"
-            "- AI chat/companion apps are NOT Games — they are Entertainment/Social\n"
-            "- Parking payment apps are NOT Finance — they are Travel/Lifestyle\n"
-            "- Gamified education/productivity apps are NOT Games — they are Education\n"
-            "- Video/photo editors are NOT Utility — they are creative tools\n"
-            "- Earning/rewards apps are NOT Finance — they are Lifestyle\n\n"
+            "- If unsure or borderline, lean toward KEEPING the app\n"
+            "- DO NOT exclude: sports fan apps, AI chat apps, parking apps, "
+            "gamified education, video/photo editors, earning/rewards apps\n\n"
             "Return ONLY the JSON lines, one per app, no other text.\n\n"
             f"APPS TO CLASSIFY:\n{apps_text}"
         )
 
-        response_text = call_llm(prompt, max_tokens=2000, use_search=False)
+        # Use search grounding so Gemini can look up unfamiliar apps
+        response_text = call_llm(prompt, max_tokens=3000, use_search=True)
 
         if response_text:
             for line in response_text.split("\n"):
@@ -484,25 +498,36 @@ def classify_apps_with_llm(enriched_apps):
                     result = json.loads(line)
                     app_num = result.get("app_num", 0)
                     should_exclude = result.get("exclude", False)
-                    category = result.get("category", "none")
-                    reason = result.get("reason", "")
+                    exclude_reason = result.get("exclude_reason", "none")
+                    app_category = result.get("app_category", "Other")
 
                     if app_num < 1 or app_num > total:
                         continue
 
                     app = enriched_apps[app_num - 1]
+                    app["app_category"] = app_category
+
                     if should_exclude:
-                        exclusions[app["app_name"]] = f"{category} — {reason}"
-                        log.info(f"  [EXCLUDE] #{app_num} {app['app_name']}: {category}")
+                        exclusions[app["app_name"]] = f"{exclude_reason}"
+                        log.info(f"  [EXCLUDE] #{app_num} {app['app_name']}: {exclude_reason} (cat: {app_category})")
                     else:
-                        log.info(f"  [KEEP]    #{app_num} {app['app_name']}")
+                        log.info(f"  [KEEP]    #{app_num} {app['app_name']} -> {app_category}")
                 except json.JSONDecodeError:
                     continue
         else:
             log.warning(f"  LLM batch {batch_start+1}-{batch_end} returned empty")
+            # Set default category for apps in failed batches
+            for idx in range(batch_start, batch_end):
+                if idx < total and not enriched_apps[idx].get("app_category"):
+                    enriched_apps[idx]["app_category"] = enriched_apps[idx].get("primary_category", "Other")
 
         log.info(f"  --- Batch {batch_start+1}-{batch_end} done ---")
         time.sleep(1)
+
+    # Ensure all apps have a category (fallback for any missed)
+    for app in enriched_apps:
+        if not app.get("app_category"):
+            app["app_category"] = app.get("primary_category", "Other")
 
     log.info(f"  {len(exclusions)} apps marked for exclusion out of {total}")
     return exclusions
@@ -547,6 +572,7 @@ def save_results(enriched_apps, exclusions):
             "app_name": app["app_name"],
             "publisher_name": app["publisher_name"],
             "icon_url": app["icon_url"],
+            "app_category": app.get("app_category", app.get("primary_category", "Other")),
             "primary_category": app["primary_category"],
             "app_iq_category": app["app_iq_category"],
             "earliest_release_date": app["earliest_release_date"],
@@ -579,12 +605,96 @@ def save_results(enriched_apps, exclusions):
     for row in rows[:20]:
         log.info(
             f"{row['rank']:<5} {row['app_name'][:39]:<40} "
-            f"{row['primary_category'][:21]:<22} "
+            f"{row['app_category'][:21]:<22} "
             f"{row['growth_rate_pct']:.0f}%{'':<6} "
             f"{row['weekly_downloads']:<12,}"
         )
     if len(rows) > 20:
         log.info(f"  ... and {len(rows) - 20} more apps")
+
+    # ── STEP 7: Build aggregated category view ──
+    log.info("=" * 60)
+    log.info("STEP 7: Building aggregated category view")
+    log.info("=" * 60)
+
+    category_data = {}
+    for row in rows:
+        cat = row.get("app_category", "Other")
+        if cat not in category_data:
+            category_data[cat] = {
+                "app_count": 0,
+                "total_weekly_downloads": 0,
+                "total_dau_30d": 0,
+                "growth_rates": [],
+                "example_apps": [],
+            }
+        entry = category_data[cat]
+        entry["app_count"] += 1
+
+        # Sum downloads
+        try:
+            entry["total_weekly_downloads"] += int(float(str(row.get("weekly_downloads", 0))))
+        except (ValueError, TypeError):
+            pass
+
+        # Sum DAU
+        try:
+            dau_val = str(row.get("last_30_days_dau_ww", "0")).replace(",", "").strip()
+            if dau_val and dau_val != "N/A":
+                entry["total_dau_30d"] += int(float(dau_val))
+        except (ValueError, TypeError):
+            pass
+
+        # Collect growth rates for averaging
+        try:
+            entry["growth_rates"].append(float(row.get("growth_rate_pct", 0)))
+        except (ValueError, TypeError):
+            pass
+
+        # Collect example apps (up to 5 per category)
+        if len(entry["example_apps"]) < 5:
+            entry["example_apps"].append({
+                "name": row.get("app_name", ""),
+                "downloads_7d": row.get("weekly_downloads", 0),
+                "growth_pct": row.get("growth_rate_pct", 0),
+            })
+
+    # Build aggregated rows
+    agg_rows = []
+    for cat, data in sorted(category_data.items(), key=lambda x: x[1]["total_weekly_downloads"], reverse=True):
+        avg_growth = (
+            round(sum(data["growth_rates"]) / len(data["growth_rates"]), 2)
+            if data["growth_rates"]
+            else 0
+        )
+        agg_rows.append({
+            "fetch_date": fetch_date,
+            "category": cat,
+            "app_count": data["app_count"],
+            "total_weekly_downloads": data["total_weekly_downloads"],
+            "total_dau_30d": data["total_dau_30d"],
+            "avg_growth_rate_pct": avg_growth,
+            "example_apps": json.dumps(data["example_apps"], ensure_ascii=False),
+        })
+
+    # Save aggregated view
+    if agg_rows:
+        saved_agg = save_latest_and_cumulative(
+            AGGREGATED_FILENAME, agg_rows, AGGREGATED_HEADERS, AGGREGATED_DEDUP_KEYS
+        )
+        log.info(f"  Saved {saved_agg} aggregated category rows")
+
+        # Log aggregated summary
+        log.info(f"\n{'Category':<30} {'Apps':<6} {'Downloads':<14} {'DAU 30d':<14} {'Avg Growth'}")
+        log.info(f"{'-'*30} {'-'*6} {'-'*14} {'-'*14} {'-'*10}")
+        for row in agg_rows:
+            log.info(
+                f"{row['category'][:29]:<30} "
+                f"{row['app_count']:<6} "
+                f"{row['total_weekly_downloads']:<14,} "
+                f"{row['total_dau_30d']:<14,} "
+                f"{row['avg_growth_rate_pct']:.1f}%"
+            )
 
     return len(rows)
 
