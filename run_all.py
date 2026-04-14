@@ -10,7 +10,6 @@ Runs every hour. On each run:
      - fetch_producthunt_top.py (top products)
      - fetch_github_trending.py (trending repos)
      - fetch_podcasts.py (tech podcast episodes)
-     - fetch_trending_new_apps.py (uprising app discovery)
 
 The "daily" tasks are gated by checking whether the current UTC date
 has already been processed (tracked via a local marker file).
@@ -136,7 +135,7 @@ def run_github_trending():
 def run_x_posts():
     """Run the X.com posts fetcher."""
     log.info("=" * 60)
-    log.info("TASK 6: X.com Posts Fetcher")
+    log.info("TASK 5: X.com Posts Fetcher")
     log.info("=" * 60)
     try:
         os.chdir(str(SCRIPT_DIR))
@@ -153,7 +152,7 @@ def run_x_posts():
 def run_podcasts():
     """Run the podcast monitor."""
     log.info("=" * 60)
-    log.info("TASK 5: Podcast Monitor")
+    log.info("TASK 6: Podcast Monitor")
     log.info("=" * 60)
     try:
         os.chdir(str(SCRIPT_DIR))
@@ -167,26 +166,6 @@ def run_podcasts():
         traceback.print_exc()
 
 
-def run_trending_new_apps():
-    """Run the trending new apps discovery pipeline."""
-    log.info("=" * 60)
-    log.info("TASK 7: Trending New Apps Discovery")
-    log.info("=" * 60)
-    if not SENSORTOWER_API_KEY:
-        log.warning("SENSORTOWER_API_KEY not set, skipping trending new apps.")
-        return
-    try:
-        os.chdir(str(SCRIPT_DIR))
-        sys.path.insert(0, str(SCRIPT_DIR))
-
-        import fetch_trending_new_apps
-        fetch_trending_new_apps.main()
-        log.info("Trending new apps discovery completed successfully.")
-    except Exception as e:
-        log.error(f"Trending new apps discovery failed: {e}")
-        traceback.print_exc()
-
-
 def main():
     log.info("=" * 60)
     log.info(f"Combined Data Fetch Runner — {datetime.now(timezone.utc).isoformat()}")
@@ -195,19 +174,18 @@ def main():
     # Task 1: Always run news fetcher
     run_news()
 
-    # Task 6: Always run X.com posts fetcher
+    # Task 5: Always run X.com posts fetcher
     run_x_posts()
 
-    # Tasks 2, 3, 4, 5, 7: Run daily tasks only once per UTC day
+    # Tasks 2, 3, 4, 6: Run daily tasks only once per UTC day
     if _daily_already_ran():
-        log.info("\nDaily tasks (Sensor Tower + Product Hunt + GitHub Trending + Podcasts + Trending New Apps) already ran today. Skipping.")
+        log.info("\nDaily tasks (Sensor Tower + Product Hunt + GitHub Trending + Podcasts) already ran today. Skipping.")
     else:
         log.info("\nRunning daily tasks (first run of the day)...")
         run_sensortower()
         run_producthunt()
         run_github_trending()
         run_podcasts()
-        run_trending_new_apps()
         _mark_daily_done()
         log.info("Daily tasks completed and marked as done.")
 
