@@ -9,7 +9,8 @@ folders on Google Drive.
 
 Accounts tracked:
   @sama, @demishassabis, @ylecun, @karpathy, @AndrewYNg,
-  @drfeifei, @rowancheung, @benthompson, @huggingface
+  @drfeifei, @rowancheung, @benthompson, @huggingface,
+  @BytePlusGlobal
 
 Output files:
   Latest/posts_2026_latest       — overwritten each run
@@ -49,6 +50,7 @@ ACCOUNTS = [
     {"username": "rowancheung",    "display": "Rowan Cheung",      "role": "Founder of The Rundown AI"},
     {"username": "benthompson",    "display": "Ben Thompson",      "role": "Founder of Stratechery"},
     {"username": "huggingface",    "display": "Hugging Face",      "role": "Open-Source AI Community"},
+    {"username": "BytePlusGlobal", "display": "BytePlus",          "role": "ByteDance's Enterprise Tech Platform"},
 ]
 
 # Google Sheet headers
