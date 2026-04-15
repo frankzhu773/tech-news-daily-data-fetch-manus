@@ -10,7 +10,7 @@ folders on Google Drive.
 Accounts tracked:
   @sama, @demishassabis, @ylecun, @karpathy, @AndrewYNg,
   @drfeifei, @rowancheung, @benthompson, @huggingface,
-  @BytePlusGlobal
+  @BytePlusGlobal, @GoogleAI, @Google, @AnthropicAI, @GeminiApp
 
 Output files:
   Latest/posts_2026_latest       — overwritten each run
@@ -51,6 +51,10 @@ ACCOUNTS = [
     {"username": "benthompson",    "display": "Ben Thompson",      "role": "Founder of Stratechery"},
     {"username": "huggingface",    "display": "Hugging Face",      "role": "Open-Source AI Community"},
     {"username": "BytePlusGlobal", "display": "BytePlus",          "role": "ByteDance's Enterprise Tech Platform"},
+    {"username": "GoogleAI",        "display": "Google AI",         "role": "Google's AI Research & Products"},
+    {"username": "Google",          "display": "Google",            "role": "Google"},
+    {"username": "AnthropicAI",     "display": "Anthropic",         "role": "AI Safety Company, Makers of Claude"},
+    {"username": "GeminiApp",       "display": "Gemini",            "role": "Google's AI Assistant"},
 ]
 
 # Google Sheet headers
