@@ -10,6 +10,7 @@ Runs every hour. On each run:
      - fetch_producthunt_top.py (top products)
      - fetch_github_trending.py (trending repos)
      - fetch_podcasts.py (tech podcast episodes)
+     - fetch_openrouter_ranking.py (OpenRouter AI app rankings)
 
 The "daily" tasks are gated by checking whether the current UTC date
 has already been processed (tracked via a local marker file).
@@ -149,6 +150,23 @@ def run_x_posts():
         traceback.print_exc()
 
 
+def run_openrouter_ranking():
+    """Run the OpenRouter global ranking fetcher."""
+    log.info("=" * 60)
+    log.info("TASK 7: OpenRouter Ranking Fetcher")
+    log.info("=" * 60)
+    try:
+        os.chdir(str(SCRIPT_DIR))
+        sys.path.insert(0, str(SCRIPT_DIR))
+
+        import fetch_openrouter_ranking
+        fetch_openrouter_ranking.main()
+        log.info("OpenRouter ranking fetcher completed successfully.")
+    except Exception as e:
+        log.error(f"OpenRouter ranking fetcher failed: {e}")
+        traceback.print_exc()
+
+
 def run_podcasts():
     """Run the podcast monitor."""
     log.info("=" * 60)
@@ -177,15 +195,16 @@ def main():
     # Task 5: Always run X.com posts fetcher
     run_x_posts()
 
-    # Tasks 2, 3, 4, 6: Run daily tasks only once per UTC day
+    # Tasks 2, 3, 4, 6, 7: Run daily tasks only once per UTC day
     if _daily_already_ran():
-        log.info("\nDaily tasks (Sensor Tower + Product Hunt + GitHub Trending + Podcasts) already ran today. Skipping.")
+        log.info("\nDaily tasks (Sensor Tower + Product Hunt + GitHub Trending + Podcasts + OpenRouter) already ran today. Skipping.")
     else:
         log.info("\nRunning daily tasks (first run of the day)...")
         run_sensortower()
         run_producthunt()
         run_github_trending()
         run_podcasts()
+        run_openrouter_ranking()
         _mark_daily_done()
         log.info("Daily tasks completed and marked as done.")
 
