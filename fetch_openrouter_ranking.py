@@ -145,14 +145,19 @@ def fetch_ranking() -> list[dict]:
 
 
 def build_rows(ranking_data: list[dict], top_n: int = TOP_N) -> list[dict]:
-    """Convert raw ranking data into rows for Google Sheets."""
+    """Convert raw ranking data into rows for Google Sheets.
+
+    The website displays apps sorted by total_tokens descending and assigns
+    sequential positions (1, 2, 3 ...).  The raw ``rank`` field in the API
+    data is an internal value with gaps, so we sort by tokens and assign
+    our own sequential rank to match the website."""
     fetched_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # Sort by rank
-    ranking_data.sort(key=lambda x: x.get("rank", 9999))
+    # Sort by total_tokens descending (matches website display order)
+    ranking_data.sort(key=lambda x: int(x.get("total_tokens", 0)), reverse=True)
 
     rows = []
-    for entry in ranking_data[:top_n]:
+    for position, entry in enumerate(ranking_data[:top_n], start=1):
         app = entry.get("app", {})
         total_tokens = int(entry.get("total_tokens", 0))
         total_requests = int(entry.get("total_requests", 0))
@@ -162,7 +167,7 @@ def build_rows(ranking_data: list[dict], top_n: int = TOP_N) -> list[dict]:
         categories = ", ".join(app.get("categories", []))
 
         rows.append({
-            "rank": entry.get("rank", ""),
+            "rank": position,
             "app_name": app.get("title", ""),
             "description": app.get("description", ""),
             "categories": categories,
