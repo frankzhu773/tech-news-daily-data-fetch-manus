@@ -107,9 +107,15 @@ def fetch_ranking() -> list[dict]:
         if 'rankingMap' not in payload:
             continue
 
-        # Decode JS string escapes (the regex captures content inside
-        # a JS string literal, so quotes appear as \" in the match)
-        decoded = payload.replace('\\"', '"').replace('\\/', '/').replace('\\n', '\n')
+        # Decode JS string escapes properly.  The regex captures the
+        # content of a JS string literal, so we can decode all escape
+        # sequences (including nested \" inside descriptions) by
+        # wrapping it back in quotes and using json.loads.
+        try:
+            decoded = json.loads('"' + payload + '"')
+        except (json.JSONDecodeError, ValueError):
+            # Fallback: simple replacement (may fail on edge cases)
+            decoded = payload.replace('\\"', '"').replace('\\/', '/').replace('\\n', '\n')
 
         # Find and extract the "day" array
         day_idx = decoded.find('"day":[')
