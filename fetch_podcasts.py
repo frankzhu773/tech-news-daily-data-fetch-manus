@@ -53,6 +53,10 @@ PODCASTS = [
     {"name": "The Twenty Minute VC",        "rss": "https://thetwentyminutevc.libsyn.com/rss"},
     {"name": "Lenny's Podcast",             "rss": "https://api.substack.com/feed/podcast/10845.rss"},
 
+    # ---- YouTube Channels ----
+    {"name": "Y Combinator",                "rss": "https://www.youtube.com/feeds/videos.xml?channel_id=UCcefcZRL2oaA_uBNeo5UOWg"},
+    {"name": "乱翻书 (Luan Fan Shu)",       "rss": "https://www.youtube.com/feeds/videos.xml?channel_id=UC0nqbhVSVHP9KVkHHBn58sw"},
+
     # ---- Chinese Podcasts ----
     {"name": "硅谷101 (Silicon Valley 101)", "rss": "https://feeds.fireside.fm/sv101/rss"},
     {"name": "What's Next｜科技早知道",       "rss": "https://feeds.fireside.fm/guiguzaozhidao/rss"},
