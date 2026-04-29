@@ -80,7 +80,7 @@ HEADERS = [
 DEDUP_KEYS = ["link"]  # Primary key: tweet URL
 
 # How many hours back to look for tweets
-LOOKBACK_HOURS = float(os.environ.get("X_LOOKBACK_HOURS", "2"))
+LOOKBACK_HOURS = float(os.environ.get("X_LOOKBACK_HOURS", "25"))
 
 # ── Twitter API helpers ───────────────────────────────────────────────────
 
