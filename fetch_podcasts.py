@@ -24,7 +24,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import feedparser
-import pytz
+from zoneinfo import ZoneInfo
+from datetime import timezone as _tz
 import requests
 from bs4 import BeautifulSoup
 
@@ -213,7 +214,7 @@ def get_publish_date(entry) -> datetime.datetime | None:
     for attr in ("published_parsed", "updated_parsed"):
         parsed = getattr(entry, attr, None)
         if parsed:
-            return datetime.datetime(*parsed[:6], tzinfo=pytz.utc)
+            return datetime.datetime(*parsed[:6], tzinfo=_tz.utc)
     return None
 
 
@@ -231,7 +232,7 @@ def get_audio_url(entry) -> str:
 
 
 def fetch_and_filter(
-    podcast: dict, target_date: datetime.date, tz: pytz.BaseTzInfo
+    podcast: dict, target_date: datetime.date, tz: ZoneInfo
 ) -> list[dict]:
     """Fetch an RSS feed and return episodes published on *target_date*."""
     name = podcast["name"]
@@ -579,7 +580,7 @@ Classifications:"""
 # ---------------------------------------------------------------------------
 
 def main():
-    tz = pytz.timezone(TIMEZONE)
+    tz = ZoneInfo(TIMEZONE)
     now_local = datetime.datetime.now(tz)
     target_date = (now_local - datetime.timedelta(days=1)).date()
 
